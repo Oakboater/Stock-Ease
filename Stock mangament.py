@@ -1,6 +1,3 @@
-# Lets make a stock mangament
-# We will need to use databases and protect sensitive infomation
-#1st lets write a list of items which can be in stock
 class StockItem:
     def __init__(self, name, sku, quantity, price):
         self.name = name
