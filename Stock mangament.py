@@ -1,24 +1,17 @@
+import tkinter as tk
+from tkinter import ttk, messagebox
 import sqlite3
 
-class StockItem:
-    def __init__(self, name, sku, quantity, price):
-        self.name = name
-        self.sku = sku
-        self.quantity = quantity
-        self.price = price
 
-    def __str__(self):
-        return f"Name: {self.name}, SKU: {self.sku}, Quantity: {self.quantity}, Price: ${self.price:.2f}"
+class InventoryApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Stock Management System")
 
-class InventoryManagement:
-    def __init__(self, db_name="inventory.db"):
-        self.db_name = db_name
-        self.setup_database()
-
-    def setup_database(self):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute("""
+        # Connect to DB and create table if not exists
+        self.conn = sqlite3.connect('inventory.db')
+        self.cursor = self.conn.cursor()
+        self.cursor.execute("""
             CREATE TABLE IF NOT EXISTS stock (
                 sku TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -26,121 +19,120 @@ class InventoryManagement:
                 price REAL NOT NULL
             )
         """)
-        conn.commit()
-        conn.close()
+        self.conn.commit()
 
-    def add_item(self, name, sku, quantity, price):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        try:
-            cursor.execute(
-                "INSERT INTO stock (sku, name, quantity, price) VALUES (?, ?, ?, ?)",
-                (sku, name, quantity, price)
-            )
-            conn.commit()
-            print("Item added successfully.")
-        except sqlite3.IntegrityError:
-            print(f"Error: An item with SKU '{sku}' already exists.")
-        finally:
-            conn.close()
+        # UI Setup
+        self.setup_ui()
+        self.load_data()
 
-    def view_stock(self):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute("SELECT sku, name, quantity, price FROM stock")
-        rows = cursor.fetchall()
-        conn.close()
+    def setup_ui(self):
+        # Table
+        self.tree = ttk.Treeview(self.root, columns=('SKU', 'Name', 'Quantity', 'Price'), show='headings')
+        self.tree.heading('SKU', text='SKU')
+        self.tree.heading('Name', text='Name')
+        self.tree.heading('Quantity', text='Quantity')
+        self.tree.heading('Price', text='Price')
+        self.tree.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
-        if rows:
-            for sku, name, quantity, price in rows:
-                item = StockItem(name, sku, quantity, price)
-                print(item)
-        else:
-            print("No items in stock.")
+        # Buttons
+        frame = tk.Frame(self.root)
+        frame.pack(pady=10)
 
-    def remove_item(self, sku):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM stock WHERE sku = ?", (sku,))
-        conn.commit()
-        if cursor.rowcount > 0:
-            print(f"Item with SKU '{sku}' removed.")
-        else:
-            print(f"No item found with SKU '{sku}'.")
-        conn.close()
+        tk.Button(frame, text="Add Item", command=self.add_item_popup).pack(side=tk.LEFT, padx=5)
+        tk.Button(frame, text="Delete by SKU", command=self.delete_item_popup).pack(side=tk.LEFT, padx=5)
+        tk.Button(frame, text="Search SKU", command=self.search_item_popup).pack(side=tk.LEFT, padx=5)
+        tk.Button(frame, text="Exit", command=self.root.destroy).pack(side=tk.LEFT, padx=5)
 
-    def search_item(self, sku):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute("SELECT sku, name, quantity, price FROM stock WHERE sku = ?", (sku,))
-        row = cursor.fetchone()
-        conn.close()
+    def load_data(self):
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+        self.cursor.execute("SELECT sku, name, quantity, price FROM stock")
+        for item in self.cursor.fetchall():
+            self.tree.insert('', tk.END, values=item)
 
-        if row:
-            item = StockItem(row[1], row[0], row[2], row[3])
-            print(item)
-        else:
-            print(f"No item found with SKU '{sku}'.")
-
-    def search_value(self, sku):
-        conn = sqlite3.connect(self.db_name)
-        cursor = conn.cursor()
-        cursor.execute("SELECT name, quantity, price FROM stock WHERE sku = ?", (sku,))
-        row = cursor.fetchone()
-        conn.close()
-
-        if row:
-            name, quantity, price = row
-            total_value = quantity * price
-            print(f"The total value of '{name}' (SKU: {sku}) is ${total_value:.2f}")
-        else:
-            print(f"No item found with SKU '{sku}'.")
-
-    def run(self):
-        while True:
+    def add_item_popup(self):
+        def submit():
+            sku = sku_entry.get()
+            name = name_entry.get()
             try:
-                userinput = int(input(
-                    "Hello User, What would you like to do?\n"
-                    "1. View stock\n"
-                    "2. Add stock\n"
-                    "3. Remove Stock\n"
-                    "4. Search Stock\n"
-                    "5. Search value\n"
-                    "6. Exit\n"
-                ))
+                quantity = int(quantity_entry.get())
+                price = float(price_entry.get())
             except ValueError:
-                print("Please enter a valid number.")
-                continue
+                messagebox.showerror("Invalid input", "Quantity must be an integer and price a number.")
+                return
+            try:
+                self.cursor.execute("INSERT INTO stock (sku, name, quantity, price) VALUES (?, ?, ?, ?)",
+                                    (sku, name, quantity, price))
+                self.conn.commit()
+                self.load_data()
+                top.destroy()
+            except sqlite3.IntegrityError:
+                messagebox.showerror("Duplicate SKU", "An item with this SKU already exists.")
 
-            if userinput == 1:
-                self.view_stock()
-            elif userinput == 2:
-                name = input("Enter item name: ")
-                sku = input("Insert SKU please, e.g. SKU001: ")
-                try:
-                    quantity = int(input("Enter quantity: "))
-                    price = float(input("Enter price: "))
-                except ValueError:
-                    print("Invalid quantity or price input. Please enter valid numbers.")
-                    continue
-                self.add_item(name, sku, quantity, price)
-            elif userinput == 3:
-                sku = input("Enter SKU to remove, e.g. SKU001: ")
-                self.remove_item(sku)
-            elif userinput == 4:
-                sku = input("Enter SKU to search, e.g. SKU001: ")
-                self.search_item(sku)
-            elif userinput == 5:
-                sku = input("Enter SKU to find total value, e.g. SKU001: ")
-                self.search_value(sku)
-            elif userinput == 6:
-                confirm = input("Are you sure you want to exit? (y/n): ").lower()
-                if confirm == 'y':
-                    print("Exiting...")
-                    break
+        top = tk.Toplevel(self.root)
+        top.title("Add New Item")
+
+        tk.Label(top, text="SKU:").grid(row=0, column=0)
+        sku_entry = tk.Entry(top)
+        sku_entry.grid(row=0, column=1)
+
+        tk.Label(top, text="Name:").grid(row=1, column=0)
+        name_entry = tk.Entry(top)
+        name_entry.grid(row=1, column=1)
+
+        tk.Label(top, text="Quantity:").grid(row=2, column=0)
+        quantity_entry = tk.Entry(top)
+        quantity_entry.grid(row=2, column=1)
+
+        tk.Label(top, text="Price:").grid(row=3, column=0)
+        price_entry = tk.Entry(top)
+        price_entry.grid(row=3, column=1)
+
+        tk.Button(top, text="Submit", command=submit).grid(row=4, column=0, columnspan=2)
+
+    def delete_item_popup(self):
+        def submit():
+            sku = sku_entry.get()
+            self.cursor.execute("DELETE FROM stock WHERE sku = ?", (sku,))
+            if self.cursor.rowcount == 0:
+                messagebox.showinfo("Not found", "No item with that SKU.")
             else:
-                print("Sorry, no valid option.")
+                self.conn.commit()
+                self.load_data()
+            top.destroy()
 
+        top = tk.Toplevel(self.root)
+        top.title("Delete Item")
+
+        tk.Label(top, text="Enter SKU to delete:").grid(row=0, column=0)
+        sku_entry = tk.Entry(top)
+        sku_entry.grid(row=0, column=1)
+        tk.Button(top, text="Delete", command=submit).grid(row=1, column=0, columnspan=2)
+
+    def search_item_popup(self):
+        def submit():
+            sku = sku_entry.get()
+            self.cursor.execute("SELECT * FROM stock WHERE sku = ?", (sku,))
+            item = self.cursor.fetchone()
+            if item:
+                total_value = item[2] * item[3]
+                messagebox.showinfo("Item Found",
+                                    f"Name: {item[1]}\nSKU: {item[0]}\nQuantity: {item[2]}\nPrice: {item[3]:.2f}\nTotal Value: ${total_value:.2f}")
+            else:
+                messagebox.showinfo("Not Found", "No item found with that SKU.")
+            top.destroy()
+
+        top = tk.Toplevel(self.root)
+        top.title("Search Item")
+
+        tk.Label(top, text="Enter SKU:").grid(row=0, column=0)
+        sku_entry = tk.Entry(top)
+        sku_entry.grid(row=0, column=1)
+        tk.Button(top, text="Search", command=submit).grid(row=1, column=0, columnspan=2)
+
+
+# Run the app
 if __name__ == "__main__":
-    inventory = InventoryManagement()
-    inventory.run()
+    root = tk.Tk()
+    app = InventoryApp(root)
+    root.mainloop()
