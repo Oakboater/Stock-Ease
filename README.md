@@ -1,0 +1,1 @@
+Stock ease is an project made by me, It uses A database and it serves its purpose for tracking stock, You can add, remove and edit, it Includes an ui using Tkinter. The ui is very basic but it is something. 
